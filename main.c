@@ -1,3 +1,13 @@
+/*
+ ============================================================================
+ Name        : networkA.c
+ Author      : OMAR ALFAROUK ALMOHAMAD
+ Version     :
+ Copyright   : Your copyright notice
+ Description : Hello World in C, Ansi-style
+ ============================================================================
+ */
+
 #include <stdio.h>
 #include <pcap.h>
 #include <stdlib.h>
@@ -15,6 +25,18 @@ void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const un
 void analyzePacketContent(const unsigned char *packet, int packetSize);
 
 int main(void) {
+    printf("\n");
+    printf("\033[32m ▄▄▄▄ ▓██   ██▓ ▄▄▄      \n");
+    printf("▓█████▄▒██  ██▒▒████▄    \n");
+    printf("▒██▒ ▄██▒██ ██░▒██  ▀█▄  \n");
+    printf("▒██░█▀  ░ ▐██▓░░██▄▄▄▄██ \n");
+    printf("░▓█  ▀█▓░ ██▒▓░ ▓█   ▓██▒\n");
+    printf("░▒▓███▀▒ ██▒▒▒  ▒▒   ▓▒█░\n");
+    printf("▒░▒   ░▓██ ░▒░   ▒   ▒▒ ░\n");
+    printf(" ░    ░▒ ▒ ░░    ░   ▒   \n");
+    printf(" ░     ░ ░           ░  ░\n");
+    printf("      ░░ ░               \n\033[0m");
+    printf("\n");
 
     selectedMethod();
     return 0;
@@ -109,17 +131,21 @@ void selectedMethod(void) {
     }
     printf("\nPlease Select A Method\n");
     printf("1. Check Input Package Size\n");
-    printf("2. Check Inputs Outputs\n");
-
-    printf("Enter The Number Of Method: ");
+    printf("2. Capture Network Traffic\n");
+    printf("3. Exit\n");
+    printf("Enter Selection: ");
     scanf("%d", &selectedValue);
 
     switch (selectedValue) {
         case 1:
+            printf("Listening packages...\n\n");
             pcap_loop(handle, 0, printPacketSize, NULL);
             break;
         case 2:
             pcap_loop(handle, 0, printIO, (unsigned char *)numOfDes);
+            break;
+        case 3:
+            exit(0);
             break;
         default:
             printf("Please enter a valid value.\n");
@@ -142,7 +168,9 @@ void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const un
 
     struct ether_header *ethHeader;
     struct ip *ipHeader;
+    struct ip *iph;
     struct tcphdr *tcpHeader = NULL;
+    struct tcphdr *tcph;
     struct udphdr *udpHeader;
     char sourceIP[INET_ADDRSTRLEN];
     char destIP[INET_ADDRSTRLEN];
@@ -161,15 +189,11 @@ void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const un
             strcpy(sourceIP, inet_ntoa(srcAddr));
             strcpy(destIP, inet_ntoa(destAddr));
 
-//            if (packetSize > threshold) {
-//                printf("%d. Siege saldırısı tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
-//                       *i, sourceIP, destIP);
-//                (*i)++;
-//            }
             if (ipHeader->ip_p == IPPROTO_TCP) {
             tcpHeader = (struct tcphdr *) (packet + sizeof(struct ether_header) + sizeof(struct ip));
 
             if (ntohs(tcpHeader->th_dport) == 22) {
+                printf("\033[0;34m");
                 printf("%d. SSH trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n", *i, sourceIP, destIP);
                 (*i)++;
 
@@ -188,16 +212,6 @@ void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const un
 
             }
 
-//            if (ntohs(tcpHeader->th_dport) == 80 || ntohs(tcpHeader->th_dport) == 443 ||
-//                ntohs(tcpHeader->th_sport) == 80 || ntohs(tcpHeader->th_sport) == 443) {
-//                printf("%d. HTTP trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
-//                       *i, sourceIP, destIP);
-//                (*i)++;
-//                unsigned char *payload = (unsigned char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct udphdr));
-//                int payloadLength = packetSize - sizeof(struct ether_header) - sizeof(struct ip) - sizeof(struct udphdr);
-//                printf("\tHTTP Kullanıcı Adı: %s\n", payload);
-//
-//            }
 
             //siege saldirsi icin
             if (ntohs(tcpHeader->th_dport) == 80 || ntohs(tcpHeader->th_dport) == 8080) {
@@ -205,17 +219,36 @@ void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const un
 
                 // HTTP GET isteği varsa Siege saldırısı olduğunu varsayalım
                 if (strstr(httpPayload, "GET") != NULL) {
-
+                    printf("\033[0;31m"); //renk kirmizi
                     printf("%d. Siege saldırısı tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
                            *i, sourceIP, destIP);
                     (*i)++;
 
                     printf("Paket Boyutu: %d\n", pkthdr->len);
                     printf("--------------------------------\n");
+                    printf("\033[0m"); //renk sifirla
                 }
             }
         }
 
+        ipHeader = (struct ip *) (packet + sizeof(struct ether_header));
+        tcpHeader = (struct tcphdr *) (packet + sizeof(struct ether_header) + sizeof(struct ip));
+
+        ipHeader = (struct ip *) (packet + sizeof(struct ether_header));
+        tcpHeader = (struct tcphdr *) (packet + sizeof(struct ether_header) + (ipHeader->ip_hl << 2));
+
+        // Paketin TCP protokolüne ait olup olmadığını kontrol etme
+        if (ntohs(ethHeader->ether_type) == ETHERTYPE_IP && ipHeader->ip_p == IPPROTO_TCP) {
+            // SYN flag'inin set (1) ve ACK flag'inin unset (0) olup olmadığını kontrol etme
+            if (tcpHeader->syn == 1 && tcpHeader->ack == 0) {
+                char sourceIP[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(ipHeader->ip_src), sourceIP, INET_ADDRSTRLEN);
+                printf("\033[0;31m"); //renk kirmizi
+                printf("%d. SYN paketi tespit edildi! Kaynak IP: %s\n",*i, sourceIP);
+                printf("\033[0m"); //renk sifirla
+                (*i)++;
+            }
+        }
 
         else if (ipHeader->ip_p == IPPROTO_ICMP) {
             printf("%d. ICMP trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",*i, sourceIP, destIP);
