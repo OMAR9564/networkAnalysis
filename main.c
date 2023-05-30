@@ -1,12 +1,3 @@
-/*
- ============================================================================
- Name        : networkA.c
- Author      : OMAR ALFAROUK ALMOHAMAD
- Version     :
- Copyright   : Your copyright notice
- Description : Hello World in C, Ansi-style
- ============================================================================
- */
 #include <stdio.h>
 #include <pcap.h>
 #include <stdlib.h>
@@ -21,6 +12,7 @@ void selectedMethod(void);
 void selectedInterface(char **interfaceName);
 void printPacketSize(u_char *args, const struct pcap_pkthdr *pkthdr, const u_char *packet);
 void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const unsigned char *packet);
+void analyzePacketContent(const unsigned char *packet, int packetSize);
 
 int main(void) {
 
@@ -97,7 +89,7 @@ void selectedInterface(char **interfaceName) {
     free(interface_names);
 }
 
-void selectedMethod() {
+void selectedMethod(void) {
     int selectedValue = 0;
     char *interfaceName = NULL;
 
@@ -147,39 +139,84 @@ void printPacketSize(u_char *args, const struct pcap_pkthdr *pkthdr, const u_cha
 
 void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const unsigned char *packet){
 
+
     struct ether_header *ethHeader;
     struct ip *ipHeader;
-    struct tcphdr *tcpHeader;
+    struct tcphdr *tcpHeader = NULL;
     struct udphdr *udpHeader;
     char sourceIP[INET_ADDRSTRLEN];
     char destIP[INET_ADDRSTRLEN];
     int packetSize = pkthdr->len;
-    int threshold = 6000; // Danger size of Package
+    int threshold = 2000; // Danger size of Package
     int *i = (int *)userData;
+    char *httpPayload;
 
     ethHeader = (struct ether_header *) packet;
 
     if (ntohs(ethHeader->ether_type) == ETHERTYPE_IP) {
-        ipHeader = (struct ip *) (packet + sizeof(struct ether_header));
-        struct in_addr srcAddr, destAddr;
-        srcAddr = ipHeader->ip_src;
-        destAddr = ipHeader->ip_dst;
-        strcpy(sourceIP, inet_ntoa(srcAddr));
-        strcpy(destIP, inet_ntoa(destAddr));
+            ipHeader = (struct ip *) (packet + sizeof(struct ether_header));
+            struct in_addr srcAddr, destAddr;
+            srcAddr = ipHeader->ip_src;
+            destAddr = ipHeader->ip_dst;
+            strcpy(sourceIP, inet_ntoa(srcAddr));
+            strcpy(destIP, inet_ntoa(destAddr));
 
-        if (packetSize > threshold) {
-            printf("%d. Aşırı büyük paket tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
-                   *i,sourceIP, destIP);
-            (*i)++;
-        }
-        else if (ipHeader->ip_p == IPPROTO_TCP) {
+//            if (packetSize > threshold) {
+//                printf("%d. Siege saldırısı tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
+//                       *i, sourceIP, destIP);
+//                (*i)++;
+//            }
+            if (ipHeader->ip_p == IPPROTO_TCP) {
             tcpHeader = (struct tcphdr *) (packet + sizeof(struct ether_header) + sizeof(struct ip));
 
             if (ntohs(tcpHeader->th_dport) == 22) {
                 printf("%d. SSH trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n", *i, sourceIP, destIP);
                 (*i)++;
+
+                unsigned char *payload = (unsigned char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct tcphdr));
+                int payloadLength = packetSize - sizeof(struct ether_header) - sizeof(struct ip) - sizeof(struct tcphdr);
+                printf("\tSSH Kullanıcı Adı: %s\n", payload);
+
+            }
+            if (ntohs(tcpHeader->th_dport) == 21 || ntohs(tcpHeader->th_sport) == 21) {
+                printf("%d. FTP trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
+                       *i, sourceIP, destIP);
+                (*i)++;
+                unsigned char *payload = (unsigned char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct udphdr));
+                int payloadLength = packetSize - sizeof(struct ether_header) - sizeof(struct ip) - sizeof(struct udphdr);
+                printf("\tFTP Kullanıcı Adı: %s\n", payload);
+
+            }
+
+//            if (ntohs(tcpHeader->th_dport) == 80 || ntohs(tcpHeader->th_dport) == 443 ||
+//                ntohs(tcpHeader->th_sport) == 80 || ntohs(tcpHeader->th_sport) == 443) {
+//                printf("%d. HTTP trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
+//                       *i, sourceIP, destIP);
+//                (*i)++;
+//                unsigned char *payload = (unsigned char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct udphdr));
+//                int payloadLength = packetSize - sizeof(struct ether_header) - sizeof(struct ip) - sizeof(struct udphdr);
+//                printf("\tHTTP Kullanıcı Adı: %s\n", payload);
+//
+//            }
+
+            //siege saldirsi icin
+            if (ntohs(tcpHeader->th_dport) == 80 || ntohs(tcpHeader->th_dport) == 8080) {
+                httpPayload = (char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct tcphdr));
+
+                // HTTP GET isteği varsa Siege saldırısı olduğunu varsayalım
+                if (strstr(httpPayload, "GET") != NULL) {
+
+                    printf("%d. Siege saldırısı tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",
+                           *i, sourceIP, destIP);
+                    (*i)++;
+
+                    printf("Paket Boyutu: %d\n", pkthdr->len);
+                    printf("--------------------------------\n");
+                }
             }
         }
+
+
         else if (ipHeader->ip_p == IPPROTO_ICMP) {
             printf("%d. ICMP trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n",*i, sourceIP, destIP);
             (*i)++;
@@ -190,12 +227,22 @@ void printIO(unsigned char *userData, const struct pcap_pkthdr *pkthdr, const un
             if (ntohs(udpHeader->uh_dport) == 53) {
                 printf("%d. DNS trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n", *i, sourceIP, destIP);
                 (*i)++;
+                unsigned char *payload = (unsigned char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct udphdr));
+                int payloadLength = packetSize - sizeof(struct ether_header) - sizeof(struct ip) - sizeof(struct udphdr);
+                printf("\tDNS Kullanıcı Adı: %s\n", payload);
+
             }
             if (ntohs(udpHeader->uh_dport) == 123) {
                 printf("%d. NTP trafiği tespit edildi!\n\tKaynak IP: %s,\n\tHedef IP: %s\n", *i, sourceIP, destIP);
                 (*i)++;
+                unsigned char *payload = (unsigned char *)(packet + sizeof(struct ether_header) + sizeof(struct ip) + sizeof(struct udphdr));
+                int payloadLength = packetSize - sizeof(struct ether_header) - sizeof(struct ip) - sizeof(struct udphdr);
+                printf("\tNTP Kullanıcı Adı: %s\n", payload);
+
+
             }
         }
     }
 
 }
+
