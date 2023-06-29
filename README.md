@@ -12,23 +12,27 @@ Bu proje, ağ trafiğini yakalayıp analiz etmek için C programlama dili kullan
 
 1. Bu projeyi bilgisayarınıza indirin:
 
-```bash
+```
   git clone https://github.com/OMAR9564/networkAnalysis.git
+```
 
 2. Projeye giriş yapın:
 
-```bash
+```
 cd networkAnalysis
+```
 
 3. Derleyin:
 
-```bash
+```
 gcc -o networkA networkA.c -lpcap
+```
 
 4. Çalıştırın:
 
-```bash
+```
 ./networkA
+```
 
 ## Kullanım
 
